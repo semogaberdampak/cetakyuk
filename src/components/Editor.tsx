@@ -5,11 +5,12 @@ import { bakeJobImage, nextJobId, sampleImageDataURL, DOT_AREA, type JobStatus, 
 import { useApp } from "../state";
 import {
   CameraIcon, GalleryIcon, ImageIcon, PinchIcon, RotateIcon, ResetIcon, SendIcon, SparkIcon,
-  ZoomInIcon, ZoomOutIcon, PenIcon, XIcon, CheckIcon,
+  ZoomInIcon, ZoomOutIcon, PenIcon, XIcon, CheckIcon, EyeIcon, EyeOffIcon, SlidersIcon,
 } from "./Icons";
 import { MonoChip, Reveal, SectionHead } from "./ui";
 
-const SIZE = 448; // resolusi preview internal
+const SIZE = 512; // diperbesar untuk UX lebih nyaman
+const LABEL_PREVIEW_SIZE = 320; // ukuran preview label di kartu resi
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 
 const MODES: { id: DitherMode; label: string }[] = [
@@ -33,16 +34,20 @@ export default function Editor() {
   const [sending, setSending] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [fontTick, setFontTick] = useState(0);
+  const [showSplit, setShowSplit] = useState(false); // split view: original | dithered
+  const [showLabelPreview, setShowLabelPreview] = useState(true);
+  const [isAdjusting, setIsAdjusting] = useState(false); // untuk feedback visual saat adjust
   const sampleIdx = useRef(0);
 
   const stageWrap = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLCanvasElement>(null);
   const dithRef = useRef<HTMLCanvasElement>(null);
   const labelRef = useRef<HTMLCanvasElement>(null);
+  const originalRef = useRef<HTMLCanvasElement>(null); // untuk split view
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const pinch = useRef<{ dist: number; mid: { x: number; y: number } } | null>(null);
 
-  /* redraw stage mentah */
+  /* redraw stage mentah (original) */
   useEffect(() => {
     const c = stageRef.current;
     if (!c) return;
@@ -52,9 +57,14 @@ export default function Editor() {
       return;
     }
     drawScene(ctx, img, st, SIZE);
+    // juga draw ke originalRef untuk split view
+    if (originalRef.current) {
+      const octx = originalRef.current.getContext("2d")!;
+      drawScene(octx, img, st, SIZE);
+    }
   }, [img, st]);
 
-  /* dither hidup (debounce) */
+  /* dither hidup (debounce minimal untuk responsif) */
   useEffect(() => {
     if (!img) return;
     const t = window.setTimeout(() => {
@@ -62,13 +72,13 @@ export default function Editor() {
       drawScene(c.getContext("2d")!, img, st, SIZE);
       const bin = dither1bit(applyContrast(grayFromCanvas(c), contrast / 100), SIZE, SIZE, mode, thr);
       if (dithRef.current) blit1bit(dithRef.current, bin, SIZE, SIZE);
-    }, 60);
+    }, 30); // lebih cepat untuk live feel
     return () => window.clearTimeout(t);
   }, [img, st, mode, thr, contrast]);
 
-  /* pratinjau label 1:1 (800×800 dot) + caption */
+  /* pratinjau label 1:1 (800×800 dot) + caption - update realtime */
   useEffect(() => {
-    if (!img) return;
+    if (!img || !showLabelPreview) return;
     const t = window.setTimeout(() => {
       const lc = labelRef.current;
       if (!lc) return;
@@ -96,16 +106,14 @@ export default function Editor() {
       ctx.globalAlpha = 1;
       ctx.font = "700 21px 'Space Mono', monospace";
       ctx.fillText(`CETAKYUK! • 100×100 MM • 8 DOT/MM`, 400, 772);
-    }, 120);
+    }, 50); // sangat cepat untuk live preview
     return () => window.clearTimeout(t);
-  }, [img, st, mode, thr, contrast, caption, fontTick]);
+  }, [img, st, mode, thr, contrast, caption, fontTick, showLabelPreview]);
 
   useEffect(() => {
     let alive = true;
     document.fonts?.ready.then(() => alive && setFontTick((v) => v + 1));
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, []);
 
   /* ---------- interaksi panggung ---------- */
@@ -119,6 +127,7 @@ export default function Editor() {
     if (!img) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    setIsAdjusting(true);
     if (pointers.current.size === 2) {
       const [a, b] = [...pointers.current.values()];
       const mid = toInternal((a.x + b.x) / 2, (a.y + b.y) / 2);
@@ -154,6 +163,7 @@ export default function Editor() {
   const endPointer = (e: React.PointerEvent<HTMLDivElement>) => {
     pointers.current.delete(e.pointerId);
     if (pointers.current.size < 2) pinch.current = null;
+    if (pointers.current.size === 0) setIsAdjusting(false);
   };
 
   useEffect(() => {
@@ -169,6 +179,8 @@ export default function Editor() {
         const kk = ns / s.s;
         return { ...s, s: ns, x: p.x - (p.x - s.x) * kk, y: p.y - (p.y - s.y) * kk };
       });
+      setIsAdjusting(true);
+      setTimeout(() => setIsAdjusting(false), 100);
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
@@ -251,11 +263,9 @@ export default function Editor() {
     try {
       const ctrl = new AbortController();
       const t = window.setTimeout(() => ctrl.abort(), 2200);
-      // Get session token from localStorage
       const sessionRaw = localStorage.getItem("cetakyuk-session");
       const session = sessionRaw ? JSON.parse(sessionRaw) : null;
       const authToken = session?.token || btoa(`${user.username}:${Date.now()}`);
-      
       const res = await fetch(`${serverUrl}/api/print`, {
         method: "POST",
         signal: ctrl.signal,
@@ -274,301 +284,395 @@ export default function Editor() {
     setSending(false);
   };
 
-  const toolBtn = "press sticker-sm inline-flex items-center justify-center rounded-lg bg-paper p-2.5 disabled:opacity-40";
+  const toolBtn = "press sticker-sm inline-flex items-center justify-center rounded-lg bg-paper p-2.5 disabled:opacity-40 transition-all";
 
   return (
     <section id="editor" className="relative border-b-2 border-ink bg-paper">
       <div className="halftone-pine absolute inset-x-0 top-0 h-40 opacity-[0.07]" aria-hidden />
-      <div className="relative mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:py-24">
+      <div className="relative mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:py-16">
         <Reveal>
           <SectionHead
-            kicker="editor demo • persis kayak di HP-mu"
+            kicker="editor kiosk • live preview realtime"
             title={
               <>
                 Atur posisinya, <span className="text-tang-deep">cubit</span> buat zoom,{" "}
                 <span className="underline decoration-leaf decoration-[6px] underline-offset-4">tulis yang manis.</span>
               </>
             }
-            sub="Output 1:1 — yang kamu lihat di layar bakal segitu juga di kertas 100×100 mm. Foto mengisi area 80×80 mm, sisanya buat catatan manismu di bawah."
+            sub="Drag / pinch / scroll = geser & zoom. Semua perubahan langsung nongol di preview label (kanan). Output 1:1 persis sama cetakan."
           />
         </Reveal>
 
-        <div className="grid gap-10 lg:grid-cols-[1.02fr_0.98fr]">
-          {/* ==================== panggung ==================== */}
+        <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+          {/* ==================== PANEL KIRI: STAGE + ALAT ==================== */}
           <Reveal>
-            <div
-              ref={stageWrap}
-              onPointerDown={onPointerDown}
-              onPointerMove={onPointerMove}
-              onPointerUp={endPointer}
-              onPointerCancel={endPointer}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragOver(true);
-              }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={onDrop}
-              className={`sticker-lg relative aspect-square touch-none select-none overflow-hidden rounded-xl bg-mint transition-shadow ${
-                img ? "cursor-grab active:cursor-grabbing" : ""
-              } ${dragOver ? "outline-4 outline-dashed outline-tang" : ""}`}
-            >
-              <canvas ref={stageRef} width={SIZE} height={SIZE} className="absolute inset-0 h-full w-full" />
-              <canvas
-                ref={dithRef}
-                className={`pixelated absolute inset-0 h-full w-full transition-opacity duration-300 ${
-                  img && ditherOn ? "opacity-100" : "opacity-0"
-                }`}
-              />
-
-              {/* sudut bidik */}
-              {img && (
-                <div className="pointer-events-none absolute inset-3 text-paper drop-shadow-[0_1px_0_rgba(0,0,0,0.6)]" aria-hidden>
-                  {["left-0 top-0 border-l-4 border-t-4", "right-0 top-0 border-r-4 border-t-4", "left-0 bottom-0 border-l-4 border-b-4", "right-0 bottom-0 border-r-4 border-b-4"].map(
-                    (c) => (
-                      <span key={c} className={`absolute h-7 w-7 rounded-sm ${c}`} />
-                    )
-                  )}
-                  <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1 rounded-full bg-ink/75 px-2.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-paper">
-                    1:1 • geser / cubit / scroll
-                  </span>
-                </div>
-              )}
-
-              {/* placeholder */}
-              {!img && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center">
-                  <span className="sticker flex h-20 w-20 items-center justify-center rounded-full bg-paper">
-                    <ImageIcon size={38} className="text-pine" />
-                  </span>
-                  <div>
-                    <p className="font-display text-2xl font-extrabold">Panggungnya masih kosong</p>
-                    <p className="mt-1 text-sm font-semibold text-ink/60">
-                      Pilih dari galeri, jepret langsung, atau jatuhin file ke sini
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-center gap-2.5">
-                    <label className="press sticker cursor-pointer rounded-full bg-leaf px-4 py-2.5 font-display text-sm font-extrabold">
-                      <input type="file" accept="image/*" className="hidden" onChange={onFile} />
-                      <span className="flex items-center gap-1.5">
-                        <GalleryIcon size={16} /> Pilih Gambar
-                      </span>
-                    </label>
-                    <button
-                      onClick={() => setCamOpen(true)}
-                      className="press sticker flex items-center gap-1.5 rounded-full bg-tang px-4 py-2.5 font-display text-sm font-extrabold"
-                    >
-                      <CameraIcon size={16} /> Buka Kamera
-                    </button>
-                    <button
-                      onClick={useSample}
-                      className="press sticker-sm flex items-center gap-1.5 rounded-full bg-paper px-4 py-2.5 font-display text-sm font-extrabold"
-                    >
-                      <SparkIcon size={15} /> Pakai Contoh
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* alat-alat */}
-            <div className="mt-5 flex flex-wrap items-center gap-2">
-              <button onClick={() => zoomBy(1.25)} disabled={!img} className={toolBtn} title="Perbesar">
-                <ZoomInIcon size={18} />
-              </button>
-              <button onClick={() => zoomBy(0.8)} disabled={!img} className={toolBtn} title="Perkecil">
-                <ZoomOutIcon size={18} />
-              </button>
-              <button
-                onClick={() => setSt((s) => ({ ...s, r: (s.r + 90) % 360 }))}
-                disabled={!img}
-                className={toolBtn}
-                title="Putar 90°"
-              >
-                <RotateIcon size={18} />
-              </button>
-              <button onClick={() => setSt({ x: 0, y: 0, s: 1, r: 0 })} disabled={!img} className={toolBtn} title="Reset">
-                <ResetIcon size={18} />
-              </button>
-              {img && (
-                <span className="sticker-sm rounded-lg bg-pine px-3 py-2 font-mono text-[11px] font-bold text-paper">
-                  zoom {Math.round(st.s * 100)}% • {st.r}°
-                </span>
-              )}
-              <button
-                onClick={() => {
-                  if (img) {
-                    setImg(null);
-                    setCaption("");
-                    toast("Panggung dikosongin. Ganti foto, yuk!", "info");
-                  }
-                }}
-                disabled={!img}
-                className={`${toolBtn} ml-auto bg-berry text-paper`}
-                title="Ganti foto"
-              >
-                <XIcon size={16} />
-              </button>
-            </div>
-
-            {/* racikan dither */}
-            <div className="sticker mt-5 rounded-xl bg-cream p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="flex items-center gap-2 font-display text-sm font-extrabold uppercase tracking-wide">
-                  <SparkIcon size={17} className="text-tang-deep" /> Racikan dither
-                </p>
-                <button
-                  onClick={() => setDitherOn((v) => !v)}
-                  className={`press sticker-sm flex items-center gap-2 rounded-full px-3 py-1.5 font-display text-xs font-extrabold ${
-                    ditherOn ? "bg-pine text-paper" : "bg-paper"
+            <div className="space-y-6">
+              {/* --- Stage Area --- */}
+              <div className="relative">
+                <div
+                  ref={stageWrap}
+                  onPointerDown={onPointerDown}
+                  onPointerMove={onPointerMove}
+                  onPointerUp={endPointer}
+                  onPointerLeave={endPointer}
+                  onPointerCancel={endPointer}
+                  onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={onDrop}
+                  className={`sticker-lg relative aspect-square touch-none select-none overflow-hidden rounded-2xl bg-mint transition-all duration-200 ${
+                    img ? "cursor-grab active:cursor-grabbing" : ""
+                  } ${dragOver ? "outline-4 outline-dashed outline-tang scale-[1.005]" : ""} ${
+                    isAdjusting ? "ring-4 ring-tang/50" : ""
                   }`}
+                  style={{ boxShadow: isAdjusting ? "0 0 0 4px #f5873c40, 8px 8px 0 0 #1e2b22" : "8px 8px 0 0 #1e2b22" }}
                 >
-                  <span className={`h-2.5 w-2.5 rounded-full border border-ink ${ditherOn ? "bg-leaf" : "bg-ink/20"}`} />
-                  {ditherOn ? "dither nyala" : "dither mati"}
-                </button>
+                  {/* Split View: Original | Dithered */}
+                  <div className="absolute inset-0 flex" style={{ overflow: "hidden" }}>
+                    {/* Original (kiri) */}
+                    <div className={`${showSplit ? "w-1/2" : "w-full"} relative h-full`}>
+                      <canvas
+                        ref={originalRef}
+                        width={SIZE}
+                        height={SIZE}
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
+                      {showSplit && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-ink/5 pointer-events-none">
+                          <span className="sticker-sm rounded-full bg-pine px-3 py-1 font-mono text-[10px] font-bold text-paper">
+                            ORIGINAL
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Dithered (kanan) - only when split mode */}
+                    {showSplit && (
+                      <div className="w-1/2 relative h-full border-l-2 border-ink/20">
+                        <canvas
+                          ref={dithRef}
+                          className={`pixelated absolute inset-0 h-full w-full transition-opacity duration-200 ${
+                            img && ditherOn ? "opacity-100" : "opacity-0"
+                          }`}
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center bg-ink/5 pointer-events-none">
+                          <span className="sticker-sm rounded-full bg-tang px-3 py-1 font-mono text-[10px] font-bold text-ink">
+                            DITHERED
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Single view: overlay dithered on top */}
+                    {!showSplit && img && ditherOn && (
+                      <canvas
+                        ref={dithRef}
+                        className="pixelated absolute inset-0 h-full w-full transition-opacity duration-200 opacity-100"
+                      />
+                    )}
+
+                    {/* Corner guides */}
+                    {img && (
+                      <div className="pointer-events-none absolute inset-3 text-paper drop-shadow-[0_1px_0_rgba(0,0,0,0.6)]" aria-hidden>
+                        {["left-0 top-0 border-l-4 border-t-4", "right-0 top-0 border-r-4 border-t-4", "left-0 bottom-0 border-l-4 border-b-4", "right-0 bottom-0 border-r-4 border-b-4"].map(
+                          (c) => (
+                            <span key={c} className={`absolute h-8 w-8 rounded-sm ${c} transition-opacity ${isAdjusting ? "opacity-100" : "opacity-60"}`} />
+                          )
+                        )}
+                        <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1 rounded-full bg-ink/75 px-2.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-paper">
+                          {isAdjusting ? "Mengatur..." : "Geser / Cubit / Scroll"}
+                        </span>
+                        {/* Zoom indicator saat adjust */}
+                        {isAdjusting && (
+                          <span className="absolute left-1/2 bottom-0 -translate-x-1/2 translate-y-1 rounded-full bg-tang px-3 py-1 font-mono text-[10px] font-bold text-ink">
+                            Zoom {Math.round(st.s * 100)}% • {st.r}°
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Placeholder */}
+                    {!img && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center">
+                        <span className="sticker flex h-24 w-24 items-center justify-center rounded-full bg-paper anim-bob">
+                          <ImageIcon size={44} className="text-pine" />
+                        </span>
+                        <div>
+                          <p className="font-display text-2xl font-extrabold">Panggungnya masih kosong</p>
+                          <p className="mt-1 text-sm font-semibold text-ink/60">
+                            Pilih dari galeri, jepret langsung, atau jatuhin file ke sini
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center justify-center gap-2.5">
+                          <label className="press sticker cursor-pointer rounded-full bg-leaf px-4 py-2.5 font-display text-sm font-extrabold">
+                            <input type="file" accept="image/*" className="hidden" onChange={onFile} />
+                            <span className="flex items-center gap-1.5"><GalleryIcon size={16} /> Pilih Gambar</span>
+                          </label>
+                          <button onClick={() => setCamOpen(true)} className="press sticker flex items-center gap-1.5 rounded-full bg-tang px-4 py-2.5 font-display text-sm font-extrabold">
+                            <CameraIcon size={16} /> Buka Kamera
+                          </button>
+                          <button onClick={useSample} className="press sticker-sm flex items-center gap-1.5 rounded-full bg-paper px-4 py-2.5 font-display text-sm font-extrabold">
+                            <SparkIcon size={15} /> Pakai Contoh
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Drop zone overlay */}
+                  {dragOver && !img && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-tang/10 outline-4 outline-dashed outline-tang rounded-2xl anim-pop">
+                      <p className="font-display text-xl font-extrabold text-tang">Lepas di sini!</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Toolbar di bawah stage */}
+                {img && (
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                    {/* Transform tools */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button onClick={() => zoomBy(1.25)} className={toolBtn} title="Perbesar (Z)" aria-label="Zoom in"><ZoomInIcon size={18} /></button>
+                      <button onClick={() => zoomBy(0.8)} className={toolBtn} title="Perkecil (X)" aria-label="Zoom out"><ZoomOutIcon size={18} /></button>
+                      <button onClick={() => setSt((s) => ({ ...s, r: (s.r + 90) % 360 }))} className={toolBtn} title="Putar 90° (R)" aria-label="Rotate 90°"><RotateIcon size={18} /></button>
+                      <button onClick={() => setSt({ x: 0, y: 0, s: 1, r: 0 })} className={toolBtn} title="Reset (0)" aria-label="Reset transform"><ResetIcon size={18} /></button>
+                      <span className="sticker-sm rounded-lg bg-pine px-3 py-2 font-mono text-[11px] font-bold text-paper hidden sm:inline-flex">
+                        Zoom {Math.round(st.s * 100)}% • {st.r}°
+                      </span>
+                    </div>
+
+                    {/* View toggles */}
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setShowSplit((v) => !v)}
+                        className={`press sticker-sm flex items-center gap-2 rounded-full px-3 py-1.5 font-display text-xs font-extrabold transition-all ${
+                          showSplit ? "bg-tang text-ink" : "bg-paper"
+                        }`}
+                        title="Split view: Original | Dithered"
+                        aria-label="Toggle split view"
+                      >
+                        {showSplit ? <EyeIcon size={14} /> : <EyeOffIcon size={14} />}
+                        <span>{showSplit ? "Gabungkan" : "Split View"}</span>
+                      </button>
+                      <button
+                        onClick={() => setShowLabelPreview((v) => !v)}
+                        className={`press sticker-sm flex items-center gap-2 rounded-full px-3 py-1.5 font-display text-xs font-extrabold transition-all ${
+                          showLabelPreview ? "bg-leaf" : "bg-paper"
+                        }`}
+                        title="Toggle label preview panel"
+                        aria-label="Toggle label preview"
+                      >
+                        <SlidersIcon size={14} />
+                        <span>{showLabelPreview ? "Sembunyikan Preview" : "Tampilkan Preview"}</span>
+                      </button>
+                    </div>
+
+                    {/* Clear button */}
+                    <button
+                      onClick={() => { setImg(null); setCaption(""); toast("Panggung dikosongin. Ganti foto, yuk!", "info"); }}
+                      className={`${toolBtn} ml-auto bg-berry text-paper`}
+                      title="Ganti foto"
+                      aria-label="Clear image"
+                    >
+                      <XIcon size={16} />
+                    </button>
+                  </div>
+                )}
               </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {MODES.map((m) => (
+
+              {/* --- Dither Controls --- */}
+              <div className="sticker rounded-xl bg-cream p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="flex items-center gap-2 font-display text-sm font-extrabold uppercase tracking-wide">
+                    <SparkIcon size={17} className="text-tang-deep" /> Racikan Dither
+                  </p>
                   <button
-                    key={m.id}
-                    onClick={() => setMode(m.id)}
-                    className={`press sticker-sm rounded-full px-3.5 py-1.5 font-mono text-[11px] font-bold uppercase tracking-wider ${
-                      mode === m.id ? "bg-tang" : "bg-paper"
+                    onClick={() => setDitherOn((v) => !v)}
+                    className={`press sticker-sm flex items-center gap-2 rounded-full px-3 py-1.5 font-display text-xs font-extrabold ${
+                      ditherOn ? "bg-pine text-paper" : "bg-paper"
                     }`}
                   >
-                    {m.label}
+                    <span className={`h-2.5 w-2.5 rounded-full border border-ink ${ditherOn ? "bg-leaf" : "bg-ink/20"}`} />
+                    {ditherOn ? "Dither Nyala" : "Dither Mati"}
                   </button>
-                ))}
-              </div>
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <label className="block">
-                  <span className="mb-1 flex justify-between font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-ink/60">
-                    <span>ambang batas</span>
-                    <span className="text-pine">{thr}</span>
-                  </span>
-                  <input
-                    type="range" min={60} max={200} value={thr}
-                    onChange={(e) => setThr(Number(e.target.value))}
-                    className="w-full accent-tang"
-                  />
-                </label>
-                <label className="block">
-                  <span className="mb-1 flex justify-between font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-ink/60">
-                    <span>kontras</span>
-                    <span className="text-pine">{contrast}%</span>
-                  </span>
-                  <input
-                    type="range" min={60} max={180} value={contrast}
-                    onChange={(e) => setContrast(Number(e.target.value))}
-                    className="w-full accent-pine"
-                  />
-                </label>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {MODES.map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => setMode(m.id)}
+                      className={`press sticker-sm rounded-full px-3.5 py-1.5 font-mono text-[11px] font-bold uppercase tracking-wider transition-all ${
+                        mode === m.id ? "bg-tang text-ink shadow-sticker-sm" : "bg-paper hover:bg-cream"
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="mb-1 flex justify-between font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-ink/60">
+                      <span>Ambang Batas</span>
+                      <span className="text-pine">{thr}</span>
+                    </span>
+                    <input
+                      type="range" min={60} max={200} value={thr}
+                      onChange={(e) => setThr(Number(e.target.value))}
+                      className="w-full accent-tang h-2"
+                      aria-label="Threshold"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 flex justify-between font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-ink/60">
+                      <span>Kontras</span>
+                      <span className="text-pine">{contrast}%</span>
+                    </span>
+                    <input
+                      type="range" min={60} max={180} value={contrast}
+                      onChange={(e) => setContrast(Number(e.target.value))}
+                      className="w-full accent-pine h-2"
+                      aria-label="Contrast"
+                    />
+                  </label>
+                </div>
               </div>
             </div>
           </Reveal>
 
-          {/* ==================== resi cetak ==================== */}
-          <Reveal delay={120}>
-            <div className="sticker-lg relative rounded-xl bg-pine p-1.5">
-              <div className="paper-grain rounded-lg bg-paper p-5 sm:p-6">
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="font-display text-xl font-extrabold">Resi Cetak</h3>
-                  <span className="sticker-sm -rotate-2 rounded-md bg-leaf px-2.5 py-1 font-mono text-[10px] font-bold uppercase tracking-widest">
-                    live preview
-                  </span>
-                </div>
-
-                <div className="relative mx-auto mt-4 w-full max-w-[340px]">
-                  <span className="perf-holes absolute -left-2.5 top-0 h-full w-2" style={{ backgroundSize: "8px 14px", ["--hole" as string]: "#1a5c46" }} aria-hidden />
-                  <span className="perf-holes absolute -right-2.5 top-0 h-full w-2" style={{ backgroundSize: "8px 14px", ["--hole" as string]: "#1a5c46" }} aria-hidden />
-                  <canvas
-                    ref={labelRef}
-                    width={800}
-                    height={800}
-                    className={`w-full rounded-sm border-2 border-ink/15 ${img ? "" : "opacity-40"}`}
-                  />
-                  {!img && (
-                    <p className="absolute inset-0 flex items-center justify-center px-8 text-center font-hand text-2xl font-semibold text-ink/50">
-                      fotomu bakal nongol di sini…
-                    </p>
-                  )}
-                </div>
-
-                <label className="mt-5 block">
-                  <span className="mb-1.5 flex items-center justify-between">
-                    <span className="flex items-center gap-1.5 font-display text-sm font-extrabold">
-                      <PenIcon size={15} className="text-tang-deep" /> Catatan manis di bawah foto
+          {/* ==================== PANEL KANAN: LIVE LABEL PREVIEW ==================== */}
+          {showLabelPreview && (
+            <Reveal delay={100}>
+              <div className="sticker-lg relative rounded-xl bg-pine p-1.5 h-full min-h-[520px] flex flex-col">
+                <div className="paper-grain rounded-lg bg-paper p-5 sm:p-6 flex flex-col h-full">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="font-display text-xl font-extrabold">Preview Label 1:1</h3>
+                    <span className="sticker-sm -rotate-2 rounded-md bg-leaf px-2.5 py-1 font-mono text-[10px] font-bold uppercase tracking-widest">
+                      Live
                     </span>
-                    <span className={`font-mono text-[10px] font-bold ${caption.length > 80 ? "text-berry" : "text-ink/45"}`}>
-                      {caption.length}/90
+                  </div>
+
+                  {/* Label Canvas */}
+                  <div className="relative flex-1 flex items-center justify-center mt-4">
+                    <div className="relative w-full max-w-[360px]">
+                      <span className="perf-holes absolute -left-3 top-0 h-full w-2.5" style={{ backgroundSize: "10px 16px", ["--hole" as string]: "#1a5c46" }} aria-hidden />
+                      <span className="perf-holes absolute -right-3 top-0 h-full w-2.5" style={{ backgroundSize: "10px 16px", ["--hole" as string]: "#1a5c46" }} aria-hidden />
+                      <canvas
+                        ref={labelRef}
+                        width={800}
+                        height={800}
+                        className={`w-full rounded-sm border-2 border-ink/15 ${img ? "shadow-sticker-lg" : "opacity-40"} transition-all duration-300`}
+                      />
+                      {!img && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center px-8 text-center">
+                          <ImageIcon size={48} className="text-ink/20" />
+                          <p className="mt-3 font-hand text-xl font-semibold text-ink/40">Foto & preview akan muncul di sini</p>
+                          <p className="mt-1 font-mono text-[10px] font-bold uppercase tracking-widest text-ink/30">Geser slider & pilih mode dither untuk lihat perubahan realtime</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Caption Input */}
+                  <label className="mt-5 block">
+                    <span className="mb-1.5 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5 font-display text-sm font-extrabold">
+                        <PenIcon size={15} className="text-tang-deep" /> Catatan manis di bawah foto
+                      </span>
+                      <span className={`font-mono text-[10px] font-bold ${caption.length > 80 ? "text-berry" : "text-ink/45"}`}>
+                        {caption.length}/90
+                      </span>
                     </span>
-                  </span>
-                  <textarea
-                    value={caption}
-                    onChange={(e) => setCaption(e.target.value.slice(0, 90))}
-                    rows={2}
-                    maxLength={90}
-                    placeholder="cth: “jangan lupa senyum, besok pasti lebih baik ♡”"
-                    className="sticker-sm w-full resize-none rounded-lg bg-cream/70 px-3.5 py-2.5 font-hand text-2xl font-semibold leading-snug outline-none placeholder:text-base placeholder:font-sans placeholder:font-medium placeholder:text-ink/35 focus:bg-mint/40"
-                  />
-                </label>
+                    <textarea
+                      value={caption}
+                      onChange={(e) => setCaption(e.target.value.slice(0, 90))}
+                      rows={2}
+                      maxLength={90}
+                      placeholder="cth: “jangan lupa senyum, besok pasti lebih baik ♡”"
+                      className="sticker-sm w-full resize-none rounded-lg bg-cream/70 px-3.5 py-2.5 font-hand text-2xl font-semibold leading-snug outline-none placeholder:text-base placeholder:font-sans placeholder:font-medium placeholder:text-ink/35 focus:bg-mint/40"
+                    />
+                  </label>
 
-                <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1.5 border-y-2 border-dashed border-ink/15 py-3.5 font-mono text-[11px] font-bold text-ink/70">
-                  <dt className="uppercase tracking-widest text-ink/45">media</dt>
-                  <dd className="text-right">100 × 100 mm</dd>
-                  <dt className="uppercase tracking-widest text-ink/45">area foto</dt>
-                  <dd className="text-right">640×640 dot ≈ 80 mm</dd>
-                  <dt className="uppercase tracking-widest text-ink/45">mesin</dt>
-                  <dd className="text-right">Zebra GC420T • OTG</dd>
-                  <dt className="uppercase tracking-widest text-ink/45">pengirim</dt>
-                  <dd className="text-right">{user ? `@${user.username}` : "belum login"}</dd>
-                </dl>
+                  {/* Specs */}
+                  <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1.5 border-y-2 border-dashed border-ink/15 py-3.5 font-mono text-[11px] font-bold text-ink/70">
+                    <dt className="uppercase tracking-widest text-ink/45">Media</dt>
+                    <dd className="text-right">100 × 100 mm</dd>
+                    <dt className="uppercase tracking-widest text-ink/45">Area Foto</dt>
+                    <dd className="text-right">640×640 dot ≈ 80 mm</dd>
+                    <dt className="uppercase tracking-widest text-ink/45">Mesin</dt>
+                    <dd className="text-right">Zebra GC420T • OTG</dd>
+                    <dt className="uppercase tracking-widest text-ink/45">Pengirim</dt>
+                    <dd className="text-right">{user ? `@${user.username}` : "Belum login"}</dd>
+                  </dl>
 
+                  {/* Send Button */}
+                  <button
+                    onClick={doSend}
+                    disabled={!img || sending}
+                    className="press sticker mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-tang py-3.5 font-display text-lg font-extrabold disabled:cursor-not-allowed disabled:opacity-45 transition-all hover:scale-[1.01] active:scale-[0.99]"
+                  >
+                    {sending ? (
+                      <>
+                        <span className="h-4 w-4 animate-spin rounded-full border-[3px] border-ink border-t-transparent" />
+                        Mengirim ke Server HP…
+                      </>
+                    ) : (
+                      <>
+                        <SendIcon size={19} /> Kirim ke Server, Cetak!
+                      </>
+                    )}
+                  </button>
+                  <p className="mt-2.5 flex items-center justify-center gap-1.5 text-center font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-ink/50">
+                    {user ? (
+                      <>
+                        <CheckIcon size={12} className="text-pine" /> Login sbg {user.role === "super" ? "Superuser" : "User Reguler"}
+                      </>
+                    ) : (
+                      <>Kirim = wajib login • File dilindungi kredensial</>
+                    )}
+                  </p>
+
+                  {/* Quick Tips */}
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <MonoChip className="bg-mint"><PinchIcon size={13} className="text-pine" /> Cubit = Zoom di HP</MonoChip>
+                    <MonoChip className="bg-mint">Scroll = Zoom di Laptop</MonoChip>
+                    <MonoChip className="bg-mint">Output 1:1, nggak ke-crop diam-diam</MonoChip>
+                    <MonoChip className="bg-mint"><SlidersIcon size={13} className="text-pine" /> Split view bandingkan original vs dither</MonoChip>
+                  </div>
+                </div>
+              </div>
+            </Reveal>
+          )}
+
+          {/* Compact mode when label preview hidden */}
+          {!showLabelPreview && img && (
+            <Reveal delay={100}>
+              <div className="sticker-lg rounded-xl bg-pine p-4 text-paper">
+                <p className="font-display text-lg font-extrabold mb-3 flex items-center gap-2">
+                  <CheckIcon size={20} className="text-leaf" /> Siap Kirim
+                </p>
+                <p className="font-hand text-xl font-semibold text-ink/80 mb-4">"{caption || "…tuliskan sesuatu yang manis…"}"</p>
                 <button
                   onClick={doSend}
-                  disabled={!img || sending}
-                  className="press sticker mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-tang py-3.5 font-display text-lg font-extrabold disabled:cursor-not-allowed disabled:opacity-45"
+                  disabled={sending}
+                  className="press sticker w-full rounded-xl bg-tang py-3 font-display text-base font-extrabold text-ink disabled:opacity-45"
                 >
-                  {sending ? (
-                    <>
-                      <span className="h-4 w-4 animate-spin rounded-full border-[3px] border-ink border-t-transparent" />
-                      Ngirim ke server HP…
-                    </>
-                  ) : (
-                    <>
-                      <SendIcon size={19} /> Kirim ke Server, Cetak!
-                    </>
-                  )}
+                  {sending ? "Mengirim…" : <><SendIcon size={18} className="inline" /> Kirim ke Server, Cetak!</>}
                 </button>
-                <p className="mt-2.5 flex items-center justify-center gap-1.5 text-center font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-ink/50">
-                  {user ? (
-                    <>
-                      <CheckIcon size={12} className="text-pine" /> login sbg {user.role === "super" ? "superuser" : "user reguler"}
-                    </>
-                  ) : (
-                    <>kirim = wajib login • file dilindungi kredensial</>
-                  )}
-                </p>
+                <button
+                  onClick={() => setShowLabelPreview(true)}
+                  className="press sticker mt-2 w-full rounded-xl bg-pine-deep py-2 font-display text-sm font-extrabold text-mint"
+                >
+                  <EyeIcon size={14} className="inline" /> Tampilkan Preview Label
+                </button>
               </div>
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              <MonoChip className="bg-mint">
-                <PinchIcon size={13} className="text-pine" /> cubit = zoom di HP
-              </MonoChip>
-              <MonoChip className="bg-mint">scroll = zoom di laptop</MonoChip>
-              <MonoChip className="bg-mint">output 1:1, nggak bakal ke-crop diam-diam</MonoChip>
-            </div>
-          </Reveal>
+            </Reveal>
+          )}
         </div>
       </div>
 
       {camOpen && (
         <CameraModal
           onClose={() => setCamOpen(false)}
-          onCapture={(src) => {
-            setCamOpen(false);
-            loadSrc(src);
-          }}
+          onCapture={(src) => { setCamOpen(false); loadSrc(src); }}
           onError={(m) => toast(m, "err")}
         />
       )}
@@ -576,7 +680,7 @@ export default function Editor() {
   );
 }
 
-/* ==================== modal kamera ==================== */
+/* ==================== Modal Kamera ==================== */
 function CameraModal({
   onClose,
   onCapture,
@@ -600,10 +704,7 @@ function CameraModal({
         } catch {
           stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
         }
-        if (stopped) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
+        if (stopped) { stream.getTracks().forEach((t) => t.stop()); return; }
         streamRef.current = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
@@ -615,10 +716,7 @@ function CameraModal({
         onClose();
       }
     })();
-    return () => {
-      stopped = true;
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-    };
+    return () => { stopped = true; streamRef.current?.getTracks().forEach((t) => t.stop()); };
   }, [onClose, onError]);
 
   const capture = () => {
@@ -639,24 +737,14 @@ function CameraModal({
           <h3 className="flex items-center gap-2 font-display text-lg font-extrabold">
             <CameraIcon size={20} className="text-tang-deep" /> Kamera HP-mu
           </h3>
-          <button onClick={onClose} className="press sticker-sm rounded-full bg-tang p-1.5" aria-label="Tutup kamera">
-            <XIcon size={14} />
-          </button>
+          <button onClick={onClose} className="press sticker-sm rounded-full bg-tang p-1.5" aria-label="Tutup kamera"><XIcon size={14} /></button>
         </div>
         <div className="sticker relative aspect-square overflow-hidden rounded-lg bg-ink">
           <video ref={videoRef} playsInline muted className={`h-full w-full object-cover ${ready ? "" : "opacity-0"}`} />
-          {!ready && (
-            <p className="absolute inset-0 flex items-center justify-center font-mono text-xs font-bold uppercase tracking-widest text-paper">
-              nyalain kamera…
-            </p>
-          )}
+          {!ready && <p className="absolute inset-0 flex items-center justify-center font-mono text-xs font-bold uppercase tracking-widest text-paper">Nyalain kamera…</p>}
           <span className="pointer-events-none absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-dashed border-paper/80" />
         </div>
-        <button
-          onClick={capture}
-          disabled={!ready}
-          className="press sticker mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-leaf py-3 font-display text-base font-extrabold disabled:opacity-45"
-        >
+        <button onClick={capture} disabled={!ready} className="press sticker mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-leaf py-3 font-display text-base font-extrabold disabled:opacity-45">
           <CameraIcon size={19} /> Jepret!
         </button>
       </div>

@@ -61,6 +61,9 @@ function ToastStack() {
 }
 
 function Shell() {
+  const { user, canAccess } = useApp();
+  const isSuper = canAccess("super");
+
   return (
     <div className="relative min-h-screen">
       <DoodleField />
@@ -68,13 +71,17 @@ function Shell() {
         <TopBar />
         <main>
           <Hero />
+          
+          {/* Marquee & Editor - visible to all */}
           <Marquee items={TICKER_A} className="bg-tang text-ink" speed={30} />
           <Editor />
           <HowItWorks />
-          <Marquee items={TICKER_B} className="bg-leaf text-ink" speed={34} />
-          <Hardware />
+          
+          {/* Superuser only sections */}
+          {isSuper && <Marquee items={TICKER_B} className="bg-leaf text-ink" speed={34} />}
+          {isSuper && <Hardware />}
           <ControlRoom />
-          <DeployGuide />
+          {isSuper && <DeployGuide />}
         </main>
         <Footer />
       </div>

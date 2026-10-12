@@ -232,6 +232,15 @@ export const AlertTriangleIcon = (p: P) => (
   </svg>
 );
 
+export const SlidersIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M4 13.5V16a2 2 0 0 1-2 2h-2M4 10.5V7a2 2 0 0 1 2-2h2" />
+    <path d="M16 13.5V16a2 2 0 0 1-2 2h-2M16 10.5V7a2 2 0 0 1 2-2h2" />
+    <path d="M12 3.5v16" strokeWidth="1.5" />
+    <path d="M12 10h.01M12 17h.01" strokeWidth="1.5" />
+  </svg>
+);
+
 export const ArrowDownIcon = (p: P) => (
   <svg {...base(p)}>
     <path d="M12 4v15M5.5 12.5 12 19l6.5-6.5" />
@@ -268,5 +277,21 @@ export const LogoMark = ({ size = 34, ...rest }: P) => (
     <path d="M18.5 31.5c1 1.6 2.2 2.4 3.5 2.4s2.5-.8 3.5-2.4" stroke="#1e2b22" strokeWidth="2" strokeLinecap="round" />
     <circle cx="39" cy="10" r="5" fill="#f5873c" stroke="#1e2b22" strokeWidth="2.2" />
     <path d="M39 7.6v2.4l1.7 1" stroke="#1e2b22" strokeWidth="1.8" strokeLinecap="round" />
+  </svg>
+);
+
+export const EyeIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M2.5 12C6 7 12 4 12 4s6 3 9.5 8c-3.5 5-9.5 8-9.5 8S6 17 2.5 12Z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+
+export const EyeOffIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M10.5 3.5C14 1.5 18 1 21.5 3.5 18 6 14 7 10.5 7" />
+    <path d="M2.5 12c3.5-5 9.5-8 9.5-8" />
+    <path d="M3.5 10.5c3.5 5 9.5 8 9.5 8" />
+    <path d="M2 2l20 20" />
   </svg>
 );
