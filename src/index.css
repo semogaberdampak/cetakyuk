@@ -20,6 +20,14 @@
   --shadow-sticker: 4px 4px 0 0 #1e2b22;
   --shadow-sticker-lg: 7px 7px 0 0 #1e2b22;
   --shadow-sticker-sm: 2px 2px 0 0 #1e2b22;
+
+  /* Mobile-first breakpoints */
+  --breakpoint-xs: 320px;
+  --breakpoint-sm: 640px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+  --breakpoint-2xl: 1536px;
 }
 
 html {
@@ -29,6 +37,11 @@ html {
 body {
   @apply bg-paper text-ink font-sans antialiased;
   overflow-x: hidden;
+}
+
+/* Prevent horizontal scroll on mobile */
+* {
+  max-width: 100%;
 }
 
 ::selection {
@@ -53,6 +66,24 @@ body {
   background: var(--color-pine);
   border: 3px solid var(--color-cream);
   border-radius: 999px;
+}
+
+/* Touch targets - minimum 44x44px for mobile */
+button, a, input, select, textarea, label[for] {
+  min-height: 44px;
+}
+
+/* Prevent zoom on input focus on iOS */
+@media screen and (max-width: 768px) {
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="search"],
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
 }
 
 .pixelated {
@@ -117,6 +148,13 @@ body {
 .press:active {
   transform: translate(3px, 3px);
   box-shadow: 1px 1px 0 0 var(--color-ink);
+}
+
+/* Touch feedback for mobile */
+@media (hover: none) and (pointer: coarse) {
+  .press:active {
+    transform: scale(0.98);
+  }
 }
 
 .teeth-down {
@@ -287,6 +325,29 @@ body {
   transform: none;
 }
 
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .reveal,
+  .anim-floaty,
+  .anim-bob,
+  .anim-spin-slow,
+  .anim-wiggle,
+  .anim-blink,
+  .anim-pop,
+  .anim-toast,
+  .anim-word,
+  .anim-feed,
+  .anim-dash,
+  .marquee-track {
+    animation: none !important;
+    transition: none !important;
+  }
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* ---------- outline display text ---------- */
 .text-outline {
   -webkit-text-stroke: 2.5px var(--color-ink);
@@ -299,4 +360,33 @@ body {
 .text-outline-pine {
   -webkit-text-stroke: 2px rgba(26, 92, 70, 0.3);
   color: transparent;
+}
+
+/* ---------- container utilities ---------- */
+.container {
+  @apply mx-auto max-w-6xl px-4 sm:px-6;
+}
+
+.container-narrow {
+  @apply mx-auto max-w-4xl px-4 sm:px-6;
+}
+
+/* ---------- text clamp utilities ---------- */
+.text-clamp-1 {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.text-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.text-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
