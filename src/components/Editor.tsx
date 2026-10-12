@@ -251,10 +251,15 @@ export default function Editor() {
     try {
       const ctrl = new AbortController();
       const t = window.setTimeout(() => ctrl.abort(), 2200);
+      // Get session token from localStorage
+      const sessionRaw = localStorage.getItem("cetakyuk-session");
+      const session = sessionRaw ? JSON.parse(sessionRaw) : null;
+      const authToken = session?.token || btoa(`${user.username}:${Date.now()}`);
+      
       const res = await fetch(`${serverUrl}/api/print`, {
         method: "POST",
         signal: ctrl.signal,
-        headers: { "Content-Type": "application/json", Authorization: `Basic ${btoa(`${user.username}:***`)}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
         body: JSON.stringify({ id, caption: job.caption, owner: job.owner, mode, dots: `${DOT_AREA}x${DOT_AREA}`, image: full, thumb }),
       });
       window.clearTimeout(t);

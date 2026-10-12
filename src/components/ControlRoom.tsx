@@ -16,7 +16,7 @@ const STATUS_UI: Record<JobStatus, { label: string; cls: string }> = {
 };
 
 export default function ControlRoom() {
-  const { user } = useApp();
+  const { user, canAccess } = useApp();
   return (
     <section id="kontrol" className="relative overflow-hidden border-b-2 border-ink bg-cream">
       <div className="grid-soft absolute inset-0" aria-hidden />
@@ -33,7 +33,7 @@ export default function ControlRoom() {
           />
         </Reveal>
 
-        {!user ? <LockedPanel /> : user.role === "super" ? <SuperPanel /> : <UserPanel />}
+        {!user ? <LockedPanel /> : canAccess("super") ? <SuperPanel /> : <UserPanel />}
       </div>
     </section>
   );

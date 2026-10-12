@@ -225,6 +225,13 @@ export const LockIcon = (p: P) => (
   </svg>
 );
 
+export const AlertTriangleIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M12 3.5 3.5 20h17L12 3.5Z" />
+    <path d="M12 9v4M12 16h.01" />
+  </svg>
+);
+
 export const ArrowDownIcon = (p: P) => (
   <svg {...base(p)}>
     <path d="M12 4v15M5.5 12.5 12 19l6.5-6.5" />
