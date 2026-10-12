@@ -1,0 +1,302 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #1e2b22;
+  --color-pine: #1a5c46;
+  --color-pine-deep: #123f30;
+  --color-leaf: #7cc24b;
+  --color-mint: #bce3ce;
+  --color-cream: #f2e8cf;
+  --color-paper: #fbf6ea;
+  --color-tang: #f5873c;
+  --color-tang-deep: #d96a24;
+  --color-berry: #e05252;
+
+  --font-display: "Bricolage Grotesque", "Nunito Sans", sans-serif;
+  --font-sans: "Nunito Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Space Mono", ui-monospace, "SFMono-Regular", monospace;
+  --font-hand: "Caveat", "Comic Sans MS", cursive;
+
+  --shadow-sticker: 4px 4px 0 0 #1e2b22;
+  --shadow-sticker-lg: 7px 7px 0 0 #1e2b22;
+  --shadow-sticker-sm: 2px 2px 0 0 #1e2b22;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-paper text-ink font-sans antialiased;
+  overflow-x: hidden;
+}
+
+::selection {
+  background: var(--color-leaf);
+  color: var(--color-ink);
+}
+
+*:focus-visible {
+  outline: 3px dashed var(--color-tang);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-cream);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-pine);
+  border: 3px solid var(--color-cream);
+  border-radius: 999px;
+}
+
+.pixelated {
+  image-rendering: pixelated;
+}
+
+/* ---------- texture & pattern ---------- */
+.halftone {
+  background-image: radial-gradient(var(--color-ink) 1px, transparent 1.4px);
+  background-size: 14px 14px;
+}
+.halftone-pine {
+  background-image: radial-gradient(var(--color-pine) 1.3px, transparent 1.7px);
+  background-size: 16px 16px;
+}
+.halftone-paper {
+  background-image: radial-gradient(var(--color-paper) 1.3px, transparent 1.7px);
+  background-size: 15px 15px;
+}
+.paper-grain {
+  background-image: repeating-linear-gradient(
+    0deg,
+    rgba(30, 43, 34, 0.03) 0px,
+    rgba(30, 43, 34, 0.03) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+}
+.stripes-tang {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--color-tang) 0 10px,
+    var(--color-tang-deep) 10px 20px
+  );
+}
+.grid-soft {
+  background-image:
+    linear-gradient(rgba(30, 43, 34, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(30, 43, 34, 0.06) 1px, transparent 1px);
+  background-size: 34px 34px;
+}
+
+/* ---------- sticker / ticket chrome ---------- */
+.sticker {
+  border: 2px solid var(--color-ink);
+  box-shadow: var(--shadow-sticker);
+}
+.sticker-lg {
+  border: 2.5px solid var(--color-ink);
+  box-shadow: var(--shadow-sticker-lg);
+}
+.sticker-sm {
+  border: 2px solid var(--color-ink);
+  box-shadow: var(--shadow-sticker-sm);
+}
+.press {
+  transition: transform 0.14s ease, box-shadow 0.14s ease;
+}
+.press:hover {
+  transform: translate(-1px, -1px);
+}
+.press:active {
+  transform: translate(3px, 3px);
+  box-shadow: 1px 1px 0 0 var(--color-ink);
+}
+
+.teeth-down {
+  height: 11px;
+  background: conic-gradient(from 135deg at 50% 0%, var(--color-paper) 90deg, #0000 0) 0 0 / 14px 11px repeat-x;
+}
+.teeth-up {
+  height: 11px;
+  background: conic-gradient(from -45deg at 50% 100%, var(--color-paper) 90deg, #0000 0) 0 0 / 14px 11px repeat-x;
+}
+.perf-holes {
+  height: 14px;
+  background-image: radial-gradient(circle at 50% 50%, var(--hole, var(--color-mint)) 3.2px, transparent 3.8px);
+  background-size: 17px 14px;
+  background-position: center;
+}
+
+/* ---------- marquee ---------- */
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee var(--speed, 28s) linear infinite;
+}
+.marquee:hover .marquee-track {
+  animation-play-state: paused;
+}
+
+/* ---------- keyframes ---------- */
+@keyframes marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+@keyframes floaty {
+  0%,
+  100% {
+    transform: translateY(0) rotate(var(--rot, 0deg));
+  }
+  50% {
+    transform: translateY(-14px) rotate(calc(var(--rot, 0deg) + 4deg));
+  }
+}
+@keyframes bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(var(--rot, 0deg));
+  }
+  50% {
+    transform: translateY(-6px) rotate(var(--rot, 0deg));
+  }
+}
+@keyframes spin-slow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes wiggle {
+  0%,
+  100% {
+    transform: rotate(-2.5deg);
+  }
+  50% {
+    transform: rotate(2.5deg);
+  }
+}
+@keyframes dash-move {
+  to {
+    stroke-dashoffset: -260;
+  }
+}
+@keyframes label-feed {
+  0% {
+    transform: translateY(-52px);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  72% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(26px);
+    opacity: 0;
+  }
+}
+@keyframes blink-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.2;
+  }
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.82) rotate(-2deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes word-flip {
+  0% {
+    opacity: 0;
+    transform: translateY(70%) rotate(3deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) rotate(-1deg);
+  }
+}
+
+.anim-floaty {
+  animation: floaty 6s ease-in-out infinite;
+}
+.anim-bob {
+  animation: bob 3.4s ease-in-out infinite;
+}
+.anim-spin-slow {
+  animation: spin-slow 22s linear infinite;
+}
+.anim-wiggle {
+  animation: wiggle 2.6s ease-in-out infinite;
+}
+.anim-blink {
+  animation: blink-dot 1.4s ease-in-out infinite;
+}
+.anim-pop {
+  animation: pop-in 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.35) both;
+}
+.anim-toast {
+  animation: toast-in 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+.anim-word {
+  animation: word-flip 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.25) both;
+}
+.anim-feed {
+  animation: label-feed 4.2s ease-in-out infinite;
+}
+.anim-dash {
+  stroke-dasharray: 12 10;
+  animation: dash-move 3.2s linear infinite;
+}
+
+/* ---------- scroll reveal ---------- */
+.reveal {
+  opacity: 0;
+  transform: translateY(30px) rotate(0.4deg);
+  transition: opacity 0.7s cubic-bezier(0.2, 0.7, 0.2, 1), transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.reveal.in {
+  opacity: 1;
+  transform: none;
+}
+
+/* ---------- outline display text ---------- */
+.text-outline {
+  -webkit-text-stroke: 2.5px var(--color-ink);
+  color: transparent;
+}
+.text-outline-paper {
+  -webkit-text-stroke: 2px var(--color-paper);
+  color: transparent;
+}
+.text-outline-pine {
+  -webkit-text-stroke: 2px rgba(26, 92, 70, 0.3);
+  color: transparent;
+}
