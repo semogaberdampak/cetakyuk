@@ -3,7 +3,7 @@ import { useApp } from "../state";
 import { Reveal, SectionHead } from "./ui";
 import {
   PhoneIcon, PrinterIcon, UsbIcon, WifiIcon, ArrowRightIcon, CopyIcon, DownloadIcon,
-  BoltIcon, KeyIcon, CheckIcon, TerminalIcon,
+  BoltIcon, KeyIcon, CheckIcon, TerminalIcon, LockIcon,
 } from "./Icons";
 
 /* ================= naskah perintah & kode ================= */
@@ -72,16 +72,16 @@ def cetak():
     OUT.mkdir(exist_ok=True)
     (OUT / (d.get("id", "job").replace("#", "") + ".zpl")).write_bytes(zpl)
     try:
-        req = urllib.request.Request(RAWBT, data=zpl, method="POST")
-        urllib.request.urlopen(req, timeout=5)
-        return jsonify(ok=True, via="rawbt-usb")
+      req = urllib.request.Request(RAWBT, data=zpl, method="POST")
+      urllib.request.urlopen(req, timeout=5)
+      return jsonify(ok=true, via="rawbt-usb")
     except Exception:
-        # printer/RawBT belum siap: job tetap aman sebagai file .zpl
-        return jsonify(ok=True, via="file", note="RawBT belum nyala; ZPL di out/"), 202
+      # printer/RawBT belum siap: job tetap aman sebagai file .zpl
+      return jsonify(ok=true, via="file", note="RawBT belum nyala; ZPL di out/"), 202
 
 if __name__ == "__main__":
     OUT.mkdir(exist_ok=True)
-    app.run(host="0.0.0.0", port=3000)   # wajib 0.0.0.0 supaya hotspot bisa akses`;
+    app.run(host="0.0.0.0", port=3000)   // wajib 0.0.0.0 supaya hotspot bisa akses`;
 
 const KOTLIN_SKEL = `// kerangka app Kotlin — USB Host API + embedded HTTP (NanoHTTPD / Ktor)
 // AndroidManifest.xml:
@@ -189,6 +189,13 @@ const TABS: { id: TabId; label: string; badge?: string }[] = [
 ];
 
 export default function DeployGuide() {
+  const { user, canAccess } = useApp();
+  
+  // Hanya tampilkan untuk superuser
+  if (!canAccess("super")) {
+    return null;
+  }
+
   const [tab, setTab] = useState<TabId>("termux");
 
   const flow: { icon: ReactNode; t: string; d: string }[] = [
